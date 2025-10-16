@@ -36,6 +36,11 @@ export default function Home() {
     }
   };
 
+  // 計算統計數據
+  const bankerCount = history.filter(r => r === 'B').length;
+  const playerCount = history.filter(r => r === 'P').length;
+  const tieCount = history.filter(r => r === 'T').length;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/10">
       {/* Header */}
@@ -57,18 +62,24 @@ export default function Home() {
                 <CardDescription>點擊按鈕記錄每一局的結果</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <Button 
                     onClick={() => addResult('B')} 
-                    className="flex-1 h-16 text-lg font-bold bg-primary hover:bg-primary/90"
+                    className="h-16 text-lg font-bold bg-red-600 hover:bg-red-700 text-white"
                   >
                     莊 (B)
                   </Button>
                   <Button 
                     onClick={() => addResult('P')} 
-                    className="flex-1 h-16 text-lg font-bold bg-accent hover:bg-accent/90"
+                    className="h-16 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     閒 (P)
+                  </Button>
+                  <Button 
+                    onClick={() => addResult('T')} 
+                    className="h-16 text-lg font-bold bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    和 (T)
                   </Button>
                 </div>
                 <div className="flex gap-3">
@@ -100,8 +111,7 @@ export default function Home() {
                   已記錄 {history.length} 局 
                   {history.length > 0 && (
                     <span className="ml-2">
-                      (莊: {history.filter(r => r === 'B').length} / 
-                      閒: {history.filter(r => r === 'P').length})
+                      (莊: {bankerCount} / 閒: {playerCount} / 和: {tieCount})
                     </span>
                   )}
                 </CardDescription>
@@ -117,11 +127,8 @@ export default function Home() {
                       <div
                         key={index}
                         className={`
-                          w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm
-                          ${result === 'B' 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-accent text-accent-foreground'
-                          }
+                          w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm text-white
+                          ${result === 'B' ? 'bg-red-600' : result === 'P' ? 'bg-blue-600' : 'bg-green-600'}
                         `}
                       >
                         {result}
@@ -147,54 +154,77 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {predictions.map((pred, index) => (
-                      <div key={index} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-muted-foreground">
-                            第 {index + 1} 局
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {pred.banker > pred.player ? '傾向莊' : '傾向閒'}
-                          </span>
-                        </div>
-                        
-                        {/* Banker Probability Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium">莊家</span>
-                            <span className="font-bold text-primary">
-                              {(pred.banker * 100).toFixed(1)}%
+                    {predictions.map((pred, index) => {
+                      const maxProb = Math.max(pred.banker, pred.player, pred.tie);
+                      const tendency = 
+                        pred.banker === maxProb ? '傾向莊' :
+                        pred.player === maxProb ? '傾向閒' : '傾向和';
+                      
+                      return (
+                        <div key={index} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-muted-foreground">
+                              第 {index + 1} 局
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {tendency}
                             </span>
                           </div>
-                          <div className="h-3 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary transition-all duration-300"
-                              style={{ width: `${pred.banker * 100}%` }}
-                            />
+                          
+                          {/* Banker Probability Bar */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">莊家</span>
+                              <span className="font-bold text-red-500">
+                                {(pred.banker * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-red-600 transition-all duration-300"
+                                style={{ width: `${pred.banker * 100}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Player Probability Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium">閒家</span>
-                            <span className="font-bold text-accent-foreground">
-                              {(pred.player * 100).toFixed(1)}%
-                            </span>
+                          {/* Player Probability Bar */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">閒家</span>
+                              <span className="font-bold text-blue-500">
+                                {(pred.player * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-600 transition-all duration-300"
+                                style={{ width: `${pred.player * 100}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-3 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-accent transition-all duration-300"
-                              style={{ width: `${pred.player * 100}%` }}
-                            />
-                          </div>
-                        </div>
 
-                        {index < predictions.length - 1 && (
-                          <div className="border-t border-border/50 pt-2" />
-                        )}
-                      </div>
-                    ))}
+                          {/* Tie Probability Bar */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">和局</span>
+                              <span className="font-bold text-green-500">
+                                {(pred.tie * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-green-600 transition-all duration-300"
+                                style={{ width: `${pred.tie * 100}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {index < predictions.length - 1 && (
+                            <div className="border-t border-border/50 pt-2" />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -213,14 +243,20 @@ export default function Home() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">莊家勝率:</span>
-                    <span className="font-bold text-primary">
-                      {((history.filter(r => r === 'B').length / history.length) * 100).toFixed(1)}%
+                    <span className="font-bold text-red-500">
+                      {((bankerCount / history.length) * 100).toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">閒家勝率:</span>
-                    <span className="font-bold text-accent-foreground">
-                      {((history.filter(r => r === 'P').length / history.length) * 100).toFixed(1)}%
+                    <span className="font-bold text-blue-500">
+                      {((playerCount / history.length) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">和局機率:</span>
+                    <span className="font-bold text-green-500">
+                      {((tieCount / history.length) * 100).toFixed(1)}%
                     </span>
                   </div>
                 </CardContent>
