@@ -24,8 +24,11 @@ export default function Home() {
   } | null>(null);
   const [stats, setStats] = useState(getPredictionStats());
   const [showFeedback, setShowFeedback] = useState(false);
+  const [isLocked, setIsLocked] = useState(false); // 鎖定輸入按鈕
 
   const addResult = (result: GameResult) => {
+    if (isLocked) return; // 如果鎖定,不允許輸入
+    
     const newHistory = [...history, result];
     setHistory(newHistory);
     
@@ -38,6 +41,7 @@ export default function Home() {
       setPrediction([]);
       setScores(null);
       setShowFeedback(false);
+      setIsLocked(false);
       return;
     }
 
@@ -54,8 +58,10 @@ export default function Home() {
       scores: result.scores,
     };
     savePredictionRecord(record);
+    
     setCurrentPredictionTimestamp(timestamp);
     setShowFeedback(true);
+    setIsLocked(true); // 鎖定輸入按鈕
   };
 
   const handleFeedback = (success: boolean) => {
@@ -63,11 +69,19 @@ export default function Home() {
       updatePredictionResult(currentPredictionTimestamp, success);
       setStats(getPredictionStats());
       setShowFeedback(false);
+      setIsLocked(false); // 解鎖輸入按鈕
+      
+      // 清空歷史,準備下一輪
+      setHistory([]);
+      setPrediction([]);
+      setScores(null);
       setCurrentPredictionTimestamp(null);
     }
   };
 
   const clearHistory = () => {
+    if (isLocked) return; // 鎖定時不允許清除
+    
     setHistory([]);
     setPrediction([]);
     setScores(null);
@@ -76,11 +90,11 @@ export default function Home() {
   };
 
   const removeLastResult = () => {
-    if (history.length > 0) {
-      const newHistory = history.slice(0, -1);
-      setHistory(newHistory);
-      generatePrediction(newHistory);
-    }
+    if (isLocked || history.length === 0) return; // 鎖定時不允許撤銷
+    
+    const newHistory = history.slice(0, -1);
+    setHistory(newHistory);
+    generatePrediction(newHistory);
   };
 
   // 計算統計數據
@@ -93,11 +107,10 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/10">
-      {/* Header */}
-      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border/40 bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/30">
         <div className="container py-6">
-          <h1 className="text-3xl font-bold text-primary">{APP_TITLE}</h1>
+          <h1 className="text-4xl font-bold text-primary">{APP_TITLE}</h1>
           <p className="text-muted-foreground mt-2">組合評分預測系統 - 三演算法智能分析</p>
         </div>
       </header>
@@ -116,19 +129,22 @@ export default function Home() {
                 <div className="grid grid-cols-3 gap-3">
                   <Button 
                     onClick={() => addResult('B')} 
-                    className="h-16 text-lg font-bold bg-red-600 hover:bg-red-700 text-white"
+                    disabled={isLocked}
+                    className="h-16 text-lg font-bold bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     莊 (B)
                   </Button>
                   <Button 
                     onClick={() => addResult('P')} 
-                    className="h-16 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={isLocked}
+                    className="h-16 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     閒 (P)
                   </Button>
                   <Button 
                     onClick={() => addResult('T')} 
-                    className="h-16 text-lg font-bold bg-green-600 hover:bg-green-700 text-white"
+                    disabled={isLocked}
+                    className="h-16 text-lg font-bold bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     和 (T)
                   </Button>
@@ -137,16 +153,16 @@ export default function Home() {
                   <Button 
                     onClick={removeLastResult} 
                     variant="outline" 
-                    className="flex-1"
-                    disabled={history.length === 0}
+                    className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLocked || history.length === 0}
                   >
                     撤銷上一筆
                   </Button>
                   <Button 
                     onClick={clearHistory} 
                     variant="destructive" 
-                    className="flex-1"
-                    disabled={history.length === 0}
+                    className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLocked}
                   >
                     清除全部
                   </Button>
@@ -154,33 +170,25 @@ export default function Home() {
               </CardContent>
             </Card>
 
-            {/* History Display */}
+            {/* History Section */}
             <Card className="border-primary/20 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-xl">歷史記錄</CardTitle>
                 <CardDescription>
-                  已記錄 {history.length} 局 
-                  {history.length > 0 && (
-                    <span className="ml-2">
-                      (莊: {bankerCount} / 閒: {playerCount} / 和: {tieCount})
-                    </span>
-                  )}
+                  已記錄 {history.length} 局 (莊: {bankerCount} / 閒: {playerCount} / 和: {tieCount})
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {history.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    尚無記錄,請開始輸入開牌結果
-                  </div>
+                  <p className="text-center text-muted-foreground py-8">尚無記錄,請開始輸入開牌結果</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {history.map((result, index) => (
                       <div
                         key={index}
-                        className={`
-                          w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm text-white
-                          ${result === 'B' ? 'bg-red-600' : result === 'P' ? 'bg-blue-600' : 'bg-green-600'}
-                        `}
+                        className={`w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md ${
+                          result === 'B' ? 'bg-red-600' : result === 'P' ? 'bg-blue-600' : 'bg-green-600'
+                        }`}
                       >
                         {result}
                       </div>
@@ -189,46 +197,11 @@ export default function Home() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Stats Card */}
-            {stats.total > 0 && (
-              <Card className="border-primary/20 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-lg">預測統計</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">總預測次數:</span>
-                    <span className="font-bold">{stats.total}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">成功次數:</span>
-                    <span className="font-bold text-green-500">{stats.success}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">失敗次數:</span>
-                    <span className="font-bold text-red-500">{stats.failure}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">待回饋:</span>
-                    <span className="font-bold text-yellow-500">{stats.pending}</span>
-                  </div>
-                  <div className="border-t border-border/50 pt-2 mt-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground font-semibold">準確率:</span>
-                      <span className="font-bold text-primary text-lg">
-                        {stats.successRate.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
-          {/* Right Column - Predictions */}
+          {/* Right Column - Prediction & Stats */}
           <div className="space-y-6">
-            {/* Prediction Result */}
+            {/* Prediction Section */}
             <Card className="border-primary/20 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-xl">預測結果 (接下來7局)</CardTitle>
@@ -236,46 +209,39 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 {prediction.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    請先輸入至少一筆歷史記錄
-                  </div>
+                  <p className="text-center text-muted-foreground py-8">請先輸入至少一筆歷史記錄</p>
                 ) : (
-                  <div className="space-y-6">
-                    {/* 預測序列 */}
-                    <div className="flex justify-center gap-3 flex-wrap">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2 justify-center">
                       {prediction.map((result, index) => (
                         <div
                           key={index}
-                          className={`
-                            w-16 h-16 rounded-lg flex flex-col items-center justify-center font-bold text-white shadow-lg
-                            ${result === 'B' ? 'bg-red-600' : 'bg-blue-600'}
-                          `}
+                          className={`w-16 h-16 rounded-lg flex flex-col items-center justify-center text-white font-bold shadow-lg ${
+                            result === 'B' ? 'bg-red-600' : result === 'P' ? 'bg-blue-600' : 'bg-green-600'
+                          }`}
                         >
-                          <div className="text-xs opacity-70">第{index + 1}</div>
-                          <div className="text-2xl">{result === 'B' ? '莊' : '閒'}</div>
+                          <div className="text-xs opacity-75">第{index + 1}</div>
+                          <div className="text-2xl">{result}</div>
                         </div>
                       ))}
                     </div>
 
-                    {/* 回饋按鈕 */}
                     {showFeedback && (
-                      <div className="border-t border-border/50 pt-4">
-                        <p className="text-sm text-muted-foreground mb-3 text-center">
-                          預測結果是否正確?
-                        </p>
+                      <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+                        <p className="text-center text-sm mb-3">預測結果是否正確?</p>
                         <div className="flex gap-3">
                           <Button
                             onClick={() => handleFeedback(true)}
                             className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                           >
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
                             預測成功
                           </Button>
                           <Button
                             onClick={() => handleFeedback(false)}
                             className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                           >
-                            <XCircle className="w-4 h-4 mr-2" />
+                            <XCircle className="mr-2 h-4 w-4" />
                             預測失敗
                           </Button>
                         </div>
@@ -290,74 +256,98 @@ export default function Home() {
             {scores && (
               <Card className="border-primary/20 shadow-lg">
                 <CardHeader>
-                  <CardTitle className="text-lg">演算法評分</CardTitle>
+                  <CardTitle className="text-xl">演算法評分</CardTitle>
                   <CardDescription>三種演算法的詳細分數</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">馬可夫鏈 (40%)</span>
-                      <span className="font-bold text-primary">
-                        {scores.markov.toFixed(1)}
-                      </span>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">馬可夫鏈 (40%)</span>
+                      <span className="text-sm font-bold text-yellow-500">{scores.markov.toFixed(1)}</span>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div 
-                        className="h-full bg-primary transition-all duration-300"
+                        className="bg-yellow-500 h-2 rounded-full transition-all" 
                         style={{ width: `${scores.markov}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">模式延續 (35%)</span>
-                      <span className="font-bold text-blue-500">
-                        {scores.pattern.toFixed(1)}
-                      </span>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">模式延續 (35%)</span>
+                      <span className="text-sm font-bold text-blue-500">{scores.pattern.toFixed(1)}</span>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div 
-                        className="h-full bg-blue-600 transition-all duration-300"
+                        className="bg-blue-500 h-2 rounded-full transition-all" 
                         style={{ width: `${scores.pattern}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">頻率平衡 (25%)</span>
-                      <span className="font-bold text-green-500">
-                        {scores.frequency.toFixed(1)}
-                      </span>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm">頻率平衡 (25%)</span>
+                      <span className="text-sm font-bold text-green-500">{scores.frequency.toFixed(1)}</span>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div 
-                        className="h-full bg-green-600 transition-all duration-300"
+                        className="bg-green-500 h-2 rounded-full transition-all" 
                         style={{ width: `${scores.frequency}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="border-t border-border/50 pt-3 mt-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">綜合評分</span>
-                      <span className="font-bold text-primary text-xl">
-                        {scores.total.toFixed(1)}
-                      </span>
+                  <div className="pt-3 border-t border-border">
+                    <div className="flex justify-between">
+                      <span className="font-bold">綜合評分</span>
+                      <span className="font-bold text-primary text-lg">{scores.total.toFixed(1)}</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             )}
+
+            {/* Stats Section */}
+            <Card className="border-primary/20 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-xl">預測統計</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span>總預測次數:</span>
+                  <span className="font-bold">{stats.total}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>成功次數:</span>
+                  <span className="font-bold text-green-500">{stats.success}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>失敗次數:</span>
+                  <span className="font-bold text-red-500">{stats.failure}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>待回饋:</span>
+                  <span className="font-bold text-yellow-500">{stats.pending}</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-border">
+                  <span className="font-bold">準確率:</span>
+                  <span className="font-bold text-primary text-lg">
+                    {stats.total > 0 ? `${stats.successRate.toFixed(1)}%` : 'N/A'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-
-        {/* Footer Note */}
-        <div className="mt-8 text-center text-xs text-muted-foreground">
-          <p>本系統僅供參考,不構成任何投注建議。請理性娛樂,謹慎決策。</p>
-        </div>
       </main>
+
+      <footer className="border-t border-border/40 mt-12 py-6">
+        <div className="container text-center text-sm text-muted-foreground">
+          本系統僅供參考,不構成任何投注建議。請理性娛樂,謹慎決策。
+        </div>
+      </footer>
     </div>
   );
 }
