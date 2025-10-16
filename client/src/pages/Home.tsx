@@ -15,21 +15,30 @@ import { CheckCircle2, XCircle, Wallet, TrendingUp, TrendingDown, AlertTriangle 
 
 // 本金比例調整策略
 function calculateBetsBasedOnBankroll(remainingBankroll: number, initialBankroll: number): number[] {
-  const ratio = remainingBankroll / initialBankroll;
-  const baseBets = [4000, 4000, 4000, 1000, 1000, 1000, 1000];
+  // 標準本金為16,000元,對應激進前置策略
+  const standardBankroll = 16000;
+  const standardBets = [4000, 4000, 4000, 1000, 1000, 1000, 1000];
   
-  if (ratio >= 1.0) {
-    // 本金充足,維持激進
-    return baseBets;
-  } else if (ratio >= 0.5) {
-    // 本金減半,賭注減半
-    return baseBets.map(b => Math.floor(b * 0.5));
-  } else if (ratio >= 0.25) {
-    // 本金剩1/4,賭注減至1/4
-    return baseBets.map(b => Math.floor(b * 0.25));
+  // 計算本金比例(相對於標準本金)
+  const bankrollRatio = remainingBankroll / standardBankroll;
+  
+  // 根據本金比例調整賭注
+  if (bankrollRatio >= 1.0) {
+    // 本金充足(≥16,000),維持激進策略
+    return standardBets;
+  } else if (bankrollRatio >= 0.5) {
+    // 本金8,000-15,999,賭注減半
+    return standardBets.map(b => Math.floor(b * 0.5));
+  } else if (bankrollRatio >= 0.25) {
+    // 本金4,000-7,999,賭注減至1/4
+    return standardBets.map(b => Math.floor(b * 0.25));
+  } else if (bankrollRatio >= 0.125) {
+    // 本金2,000-3,999,賭注減至1/8
+    return standardBets.map(b => Math.floor(b * 0.125));
   } else {
-    // 本金不足1/4,最保守
-    return [500, 500, 500, 300, 300, 300, 300];
+    // 本金不足2,000,最保守策略
+    const minBet = Math.max(100, Math.floor(remainingBankroll / 20));
+    return [minBet, minBet, minBet, minBet, minBet, minBet, minBet];
   }
 }
 
