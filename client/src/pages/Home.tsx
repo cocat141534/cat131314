@@ -44,6 +44,7 @@ export default function Home() {
   const [stats, setStats] = useState(getPredictionStats());
   const [showFeedback, setShowFeedback] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [selectedRound, setSelectedRound] = useState<number | null>(null); // 選中的局數(0-6)
   
   // 本金管理
   const [initialBankroll, setInitialBankroll] = useState<number>(16000);
@@ -98,15 +99,27 @@ export default function Home() {
       setStats(getPredictionStats());
     }
     
-    // 更新本金
-    if (success) {
-      // 假設在第1局命中(最常見情況)
-      const profit = recommendedBets[0];
-      setRemainingBankroll(prev => prev + profit);
-    } else {
-      // 失敗,虧損全部投入
+    // 計算本金變化
+    let newBankroll = remainingBankroll;
+    
+    if (success && selectedRound !== null) {
+      // 成功:計算投入成本和獲利
+      const totalInvested = recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0);
+      const profit = recommendedBets[selectedRound]; // 1賠1
+      const netProfit = profit - totalInvested;
+      newBankroll = remainingBankroll + netProfit;
+    } else if (!success) {
+      // 失敗:虧損全部投入
       const totalLoss = recommendedBets.reduce((sum, bet) => sum + bet, 0);
-      setRemainingBankroll(prev => Math.max(0, prev - totalLoss));
+      newBankroll = Math.max(0, remainingBankroll - totalLoss);
+    }
+    
+    setRemainingBankroll(newBankroll);
+    
+    // 根據新本金調整賭注(只有當本金低於初始本金時)
+    if (newBankroll < initialBankroll) {
+      const newBets = calculateBetsBasedOnBankroll(newBankroll, initialBankroll);
+      setRecommendedBets(newBets);
     }
     
     // 清空歷史並解鎖
@@ -115,6 +128,7 @@ export default function Home() {
     setScores(null);
     setShowFeedback(false);
     setIsLocked(false);
+    setSelectedRound(null);
     setCurrentPredictionTimestamp(null);
   };
 
@@ -371,9 +385,15 @@ export default function Home() {
                       {prediction.map((result, index) => (
                         <div key={index} className="text-center">
                           <div className="text-xs text-gray-400 mb-1">第{index + 1}局</div>
-                          <div className={`${getResultColor(result)} text-white px-2 py-3 rounded font-bold text-lg`}>
+                          <button
+                            onClick={() => setSelectedRound(index)}
+                            disabled={!showFeedback}
+                            className={`w-full ${getResultColor(result)} text-white px-2 py-3 rounded font-bold text-lg transition-all ${
+                              selectedRound === index ? 'ring-4 ring-yellow-400 scale-110' : ''
+                            } ${showFeedback ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
+                          >
                             {getResultLabel(result)}
-                          </div>
+                          </button>
                           <div className="text-xs text-yellow-400 mt-1">
                             {recommendedBets[index].toLocaleString()}
                           </div>
@@ -396,12 +416,24 @@ export default function Home() {
                     {showFeedback && (
                       <div className="bg-gray-700/50 p-4 rounded space-y-3">
                         <div className="text-center text-gray-300 font-medium">
-                          預測結果是否正確?
+                          {selectedRound === null ? (
+                            <span>請點擊命中的局數</span>
+                          ) : (
+                            <div className="space-y-1">
+                              <div>第 {selectedRound + 1} 局命中</div>
+                              <div className="text-sm text-gray-400">
+                                投入: {recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0).toLocaleString()}元 | 
+                                獲利: {recommendedBets[selectedRound].toLocaleString()}元 | 
+                                淨損益: {(recommendedBets[selectedRound] - recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0)).toLocaleString()}元
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <Button
                             onClick={() => handleFeedback(true)}
-                            className="bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2"
+                            disabled={selectedRound === null}
+                            className="bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <CheckCircle2 className="w-5 h-5" />
                             預測成功
