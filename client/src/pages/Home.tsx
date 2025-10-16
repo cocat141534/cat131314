@@ -226,7 +226,7 @@ export default function Home() {
                           }`}
                         >
                           <div className="text-xs opacity-75">第{index + 1}</div>
-                          <div className="text-2xl">{result}</div>
+                          <div className="text-2xl">{result === 'B' ? '莊' : result === 'P' ? '閒' : '和'}</div>
                         </div>
                       ))}
                     </div>
