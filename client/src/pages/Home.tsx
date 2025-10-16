@@ -105,8 +105,8 @@ export default function Home() {
     if (success && selectedRound !== null) {
       // 成功:計算投入成本和獲利
       const totalInvested = recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0);
-      const profit = recommendedBets[selectedRound]; // 1賠1
-      const netProfit = profit - totalInvested;
+      const winAmount = recommendedBets[selectedRound] * 2; // 百家樂1賠1,拿回本金+獲利
+      const netProfit = winAmount - totalInvested; // 拿回的錢 - 總投入
       newBankroll = remainingBankroll + netProfit;
     } else if (!success) {
       // 失敗:虧損全部投入
@@ -423,8 +423,8 @@ export default function Home() {
                               <div>第 {selectedRound + 1} 局命中</div>
                               <div className="text-sm text-gray-400">
                                 投入: {recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0).toLocaleString()}元 | 
-                                獲利: {recommendedBets[selectedRound].toLocaleString()}元 | 
-                                淨損益: {(recommendedBets[selectedRound] - recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0)).toLocaleString()}元
+                                拿回: {(recommendedBets[selectedRound] * 2).toLocaleString()}元 | 
+                                淨損益: {(recommendedBets[selectedRound] * 2 - recommendedBets.slice(0, selectedRound + 1).reduce((sum, bet) => sum + bet, 0)).toLocaleString()}元
                               </div>
                             </div>
                           )}
