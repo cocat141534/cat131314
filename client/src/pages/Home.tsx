@@ -37,7 +37,8 @@ export default function Home() {
   };
 
   const generatePrediction = (currentHistory: GameResult[]) => {
-    if (currentHistory.length === 0) {
+    // 少於7次記錄時,不生成預測
+    if (currentHistory.length < 7) {
       setPrediction([]);
       setScores(null);
       setShowFeedback(false);
@@ -45,6 +46,7 @@ export default function Home() {
       return;
     }
 
+    // 達到7次記錄,生成預測並鎖定
     const result = predictWithScores(currentHistory, 7);
     setPrediction(result.prediction);
     setScores(result.scores);
@@ -209,7 +211,10 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 {prediction.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">請先輸入至少一筆歷史記錄</p>
+                  <p className="text-center text-muted-foreground py-8">
+                    請先輸入至少7筆歷史記錄才能生成預測<br/>
+                    <span className="text-sm">(已輸入 {history.length} / 7 筆)</span>
+                  </p>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2 justify-center">
