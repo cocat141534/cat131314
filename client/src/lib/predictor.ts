@@ -33,7 +33,7 @@ function generateCombinations(length: number): GameResult[][] {
 }
 
 /**
- * 演算法 1: 馬可夫鏈轉移機率評分
+ * 演算法 1: 馬可夫鏈轉移機率評分 (改用對數避免數值過小)
  */
 function scoreMarkovChain(history: GameResult[], combination: GameResult[]): number {
   // 過濾掉和局,只看莊閒轉移
@@ -43,7 +43,7 @@ function scoreMarkovChain(history: GameResult[], combination: GameResult[]): num
     return 50; // 沒有歷史記錄,返回中性分數
   }
   
-  // 計算轉移機率
+  // 計算轉移次數
   const transitions = {
     'B->B': 0,
     'B->P': 0,
@@ -58,18 +58,18 @@ function scoreMarkovChain(history: GameResult[], combination: GameResult[]): num
     transitions[key]++;
   }
   
-  // 計算轉移機率
-  const bTotal = transitions['B->B'] + transitions['B->P'];
-  const pTotal = transitions['P->B'] + transitions['P->P'];
+  // 計算轉移機率 (使用拉普拉斯平滑避免0機率)
+  const bTotal = transitions['B->B'] + transitions['B->P'] + 2; // +2 是平滑參數
+  const pTotal = transitions['P->B'] + transitions['P->P'] + 2;
   
-  const probBB = bTotal > 0 ? transitions['B->B'] / bTotal : 0.5;
-  const probBP = bTotal > 0 ? transitions['B->P'] / bTotal : 0.5;
-  const probPB = pTotal > 0 ? transitions['P->B'] / pTotal : 0.5;
-  const probPP = pTotal > 0 ? transitions['P->P'] / pTotal : 0.5;
+  const probBB = (transitions['B->B'] + 1) / bTotal;
+  const probBP = (transitions['B->P'] + 1) / bTotal;
+  const probPB = (transitions['P->B'] + 1) / pTotal;
+  const probPP = (transitions['P->P'] + 1) / pTotal;
   
-  // 計算組合的機率分數
-  let score = 100;
-  let current: 'B' | 'P' = filtered[filtered.length - 1] as 'B' | 'P'; // 從最後一個歷史記錄開始
+  // 計算組合的對數機率
+  let logProb = 0;
+  let current: 'B' | 'P' = filtered[filtered.length - 1] as 'B' | 'P';
   
   for (const next of combination) {
     let transitionProb = 0.5;
@@ -79,12 +79,14 @@ function scoreMarkovChain(history: GameResult[], combination: GameResult[]): num
     else if (current === 'P' && next === 'B') transitionProb = probPB;
     else if (current === 'P' && next === 'P') transitionProb = probPP;
     
-    score *= transitionProb;
+    logProb += Math.log(transitionProb);
     current = next as 'B' | 'P';
   }
   
-  // 標準化到 0-100
-  return Math.min(100, score * 1000);
+  // 轉換為 0-100 分數 (對數值通常是負數,需要標準化)
+  // 理論最大值約為 log(1)^7 = 0, 最小值約為 log(0.25)^7 = -9.7
+  const normalizedScore = Math.max(0, Math.min(100, (logProb + 10) * 10));
+  return normalizedScore;
 }
 
 /**
@@ -93,80 +95,73 @@ function scoreMarkovChain(history: GameResult[], combination: GameResult[]): num
 function scorePatternContinuity(history: GameResult[], combination: GameResult[]): number {
   const filtered = history.filter(r => r !== 'T');
   
-  if (filtered.length < 3) {
+  if (filtered.length < 2) {
     return 50; // 歷史太少,返回中性分數
   }
   
-  // 識別當前模式
-  const recent = filtered.slice(-4);
-  let patternType = 'random';
+  // 識別最近的模式
+  const recent = filtered.slice(-6); // 看最近6個
+  let patternScore = 50;
   
-  // 單跳模式: BPBP 或 PBPB
+  // 檢測單跳模式 (交替出現)
   if (recent.length >= 4) {
-    const isSingleJump = 
-      recent[0] !== recent[1] && 
-      recent[1] !== recent[2] && 
-      recent[2] !== recent[3];
-    if (isSingleJump) patternType = 'single-jump';
-  }
-  
-  // 雙跳模式: BBPP 或 PPBB
-  if (recent.length >= 4) {
-    const isDoubleJump = 
-      recent[0] === recent[1] && 
-      recent[1] !== recent[2] && 
-      recent[2] === recent[3];
-    if (isDoubleJump) patternType = 'double-jump';
-  }
-  
-  // 長龍模式: BBB 或 PPP
-  const last3 = filtered.slice(-3);
-  if (last3.length === 3 && last3[0] === last3[1] && last3[1] === last3[2]) {
-    patternType = 'streak';
-  }
-  
-  // 評估組合是否符合模式
-  let score = 50;
-  
-  if (patternType === 'single-jump') {
-    // 期望繼續單跳
-    let jumpCount = 0;
-    let prev: 'B' | 'P' = filtered[filtered.length - 1] as 'B' | 'P';
-    for (const next of combination) {
-      if (next !== prev) jumpCount++;
-      prev = next as 'B' | 'P';
+    let alternateCount = 0;
+    for (let i = 0; i < recent.length - 1; i++) {
+      if (recent[i] !== recent[i + 1]) alternateCount++;
     }
-    score = (jumpCount / combination.length) * 100;
-  } else if (patternType === 'double-jump') {
-    // 期望繼續雙跳
-    let doubleJumpScore = 0;
-    for (let i = 0; i < combination.length - 1; i += 2) {
-      if (i + 1 < combination.length && combination[i] === combination[i + 1]) {
-        doubleJumpScore += 20;
+    const alternateRatio = alternateCount / (recent.length - 1);
+    
+    // 如果歷史是單跳,檢查組合是否也是單跳
+    if (alternateRatio > 0.6) {
+      let combAlternate = 0;
+      let prev: 'B' | 'P' = filtered[filtered.length - 1] as 'B' | 'P';
+      for (const next of combination) {
+        if (next !== prev) combAlternate++;
+        prev = next as 'B' | 'P';
       }
+      const combAlternateRatio = combAlternate / combination.length;
+      patternScore = combAlternateRatio * 100;
+      return patternScore;
     }
-    score = Math.min(100, doubleJumpScore);
-  } else if (patternType === 'streak') {
-    // 期望延續長龍
-    const streakValue = filtered[filtered.length - 1];
-    const streakCount = combination.filter(r => r === streakValue).length;
-    score = (streakCount / combination.length) * 100;
   }
   
-  return score;
+  // 檢測連續模式 (連莊或連閒)
+  const lastValue = filtered[filtered.length - 1];
+  let streakLength = 1;
+  for (let i = filtered.length - 2; i >= 0; i--) {
+    if (filtered[i] === lastValue) {
+      streakLength++;
+    } else {
+      break;
+    }
+  }
+  
+  // 如果有連續,給予延續連續的組合較高分
+  if (streakLength >= 2) {
+    const sameCount = combination.filter(r => r === lastValue).length;
+    const sameRatio = sameCount / combination.length;
+    // 連續越長,越傾向繼續,但不要太極端
+    const streakFactor = Math.min(streakLength / 5, 0.8);
+    patternScore = 50 + sameRatio * 50 * streakFactor;
+    return patternScore;
+  }
+  
+  // 沒有明顯模式,給予平衡的組合較高分
+  const bCount = combination.filter(r => r === 'B').length;
+  const balance = 1 - Math.abs(bCount - combination.length / 2) / (combination.length / 2);
+  return 50 + balance * 30;
 }
 
 /**
- * 演算法 3: 頻率平衡評分
+ * 演算法 3: 頻率平衡評分 (改進版,避免過度補償)
  */
 function scoreFrequencyBalance(history: GameResult[], combination: GameResult[]): number {
   const filtered = history.filter(r => r !== 'T');
   
   if (filtered.length === 0) {
-    // 沒有歷史,期望平衡
+    // 沒有歷史,期望組合本身平衡
     const bCount = combination.filter(r => r === 'B').length;
-    const pCount = combination.filter(r => r === 'P').length;
-    const balance = 1 - Math.abs(bCount - pCount) / combination.length;
+    const balance = 1 - Math.abs(bCount - combination.length / 2) / (combination.length / 2);
     return balance * 100;
   }
   
@@ -175,19 +170,25 @@ function scoreFrequencyBalance(history: GameResult[], combination: GameResult[])
   const historyPCount = filtered.filter(r => r === 'P').length;
   const historyBRatio = historyBCount / filtered.length;
   
-  // 計算加上組合後的比例
+  // 計算組合的莊閒比例
   const combBCount = combination.filter(r => r === 'B').length;
   const combPCount = combination.filter(r => r === 'P').length;
+  
+  // 計算加上組合後的整體比例
   const totalBCount = historyBCount + combBCount;
   const totalPCount = historyPCount + combPCount;
-  const newBRatio = totalBCount / (totalBCount + totalPCount);
+  const totalCount = totalBCount + totalPCount;
+  const newBRatio = totalBCount / totalCount;
   
-  // 期望比例趨向 0.5 (平衡)
-  const targetRatio = 0.5;
-  const improvement = Math.abs(historyBRatio - targetRatio) - Math.abs(newBRatio - targetRatio);
+  // 目標是讓整體比例趨向 0.5,但不要過度補償
+  const currentDeviation = Math.abs(historyBRatio - 0.5);
+  const newDeviation = Math.abs(newBRatio - 0.5);
   
-  // 如果組合讓比例更接近平衡,給高分
-  return 50 + improvement * 200;
+  // 如果組合讓偏差變小,給高分;但限制改善幅度避免極端
+  const improvement = currentDeviation - newDeviation;
+  const normalizedImprovement = Math.max(-0.2, Math.min(0.2, improvement));
+  
+  return 50 + normalizedImprovement * 250;
 }
 
 /**
