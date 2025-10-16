@@ -346,6 +346,33 @@ export default function Home() {
             </Card>
           </div>
         </div>
+        {/* FAQ Section */}
+        <div className="container mt-12">
+          <Card className="border-primary/20 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl">說明 & 問題</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-primary mb-2">網站製作出的預測結果可以相信嗎？</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  <span className="font-bold text-red-500">不能</span>，本網站僅提供數據分析後結果，並不保證100%的準確度及正確性，請自行評估，控制好風險。
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-bold text-primary mb-2">如何開始使用？</h3>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground leading-relaxed">
+                  <li>進入任何一局，等第一次開完獎後，利用上方按鈕把<span className="font-bold text-primary">前七次</span>的順序按出來。</li>
+                  <li>等待分析後，按照分析的結果<span className="font-bold text-primary">從左開始依序下注</span>並配合自己的注碼。</li>
+                  <li>遇到<span className="font-bold text-green-600">和局</span>重複下注即可。</li>
+                  <li>只要有贏就是<span className="font-bold text-primary">換房再次進行分析</span>。</li>
+                  <li className="font-bold text-yellow-500">請確認自己的止損止盈，小賭怡情。</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       <footer className="border-t border-border/40 mt-12 py-6">
