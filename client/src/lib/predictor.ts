@@ -9,6 +9,10 @@ export interface PredictionRecord {
     markov: number;
     pattern: number;
     frequency: number;
+    dragon: number;
+    jump: number;
+    regularity: number;
+    random: number;
     total: number;
   };
 }
@@ -58,14 +62,21 @@ function scoreMarkovChain(history: GameResult[], combination: GameResult[]): num
     transitions[key]++;
   }
   
-  // 計算轉移機率 (使用拉普拉斯平滑避免0機率)
-  const bTotal = transitions['B->B'] + transitions['B->P'] + 2; // +2 是平滑參數
-  const pTotal = transitions['P->B'] + transitions['P->P'] + 2;
+  // 計算轉移機率 (增加平滑參數避免極端機率)
+  const smoothing = 5; // 增加平滑參數從2到5
+  const bTotal = transitions['B->B'] + transitions['B->P'] + smoothing * 2;
+  const pTotal = transitions['P->B'] + transitions['P->P'] + smoothing * 2;
   
-  const probBB = (transitions['B->B'] + 1) / bTotal;
-  const probBP = (transitions['B->P'] + 1) / bTotal;
-  const probPB = (transitions['P->B'] + 1) / pTotal;
-  const probPP = (transitions['P->P'] + 1) / pTotal;
+  let probBB = (transitions['B->B'] + smoothing) / bTotal;
+  let probBP = (transitions['B->P'] + smoothing) / bTotal;
+  let probPB = (transitions['P->B'] + smoothing) / pTotal;
+  let probPP = (transitions['P->P'] + smoothing) / pTotal;
+  
+  // 限制機率範圍,避免過於極端 (0.2 - 0.8)
+  probBB = Math.max(0.2, Math.min(0.8, probBB));
+  probBP = Math.max(0.2, Math.min(0.8, probBP));
+  probPB = Math.max(0.2, Math.min(0.8, probPB));
+  probPP = Math.max(0.2, Math.min(0.8, probPP));
   
   // 計算組合的對數機率
   let logProb = 0;
@@ -136,13 +147,22 @@ function scorePatternContinuity(history: GameResult[], combination: GameResult[]
     }
   }
   
-  // 如果有連續,給予延續連續的組合較高分
+  // 如果有連續,給予延續連續的組合較高分(但降低權重避免過度連續)
   if (streakLength >= 2) {
     const sameCount = combination.filter(r => r === lastValue).length;
     const sameRatio = sameCount / combination.length;
-    // 連續越長,越傾向繼續,但不要太極端
-    const streakFactor = Math.min(streakLength / 5, 0.8);
-    patternScore = 50 + sameRatio * 50 * streakFactor;
+    
+    // 大幅降低連續權重,並設定上限
+    // 連續越長,權重反而降低(因為連續太長很容易斷)
+    const streakFactor = Math.min(streakLength / 10, 0.3); // 從 0.8 降至 0.3
+    
+    // 不鼓勵全部相同,給予部分相同的組合更高分
+    // sameRatio 在 0.4-0.6 範圍時得分最高
+    const optimalRatio = 0.5; // 最佳比例
+    const ratioDeviation = Math.abs(sameRatio - optimalRatio);
+    const ratioScore = 1 - ratioDeviation * 2; // 偏離越大分數越低
+    
+    patternScore = 50 + ratioScore * 30 * streakFactor;
     return patternScore;
   }
   
@@ -192,17 +212,210 @@ function scoreFrequencyBalance(history: GameResult[], combination: GameResult[])
 }
 
 /**
+ * 演算法 4: 長龍斬龍評分
+ * 檢測連續出現的長龍,預測其即將中斷
+ */
+function scoreDragonSlayer(history: GameResult[], combination: GameResult[]): number {
+  const filtered = history.filter(r => r !== 'T');
+  
+  if (filtered.length < 3) {
+    return 50; // 歷史太少,返回中性分數
+  }
+  
+  // 檢測當前是否有長龍
+  const lastValue = filtered[filtered.length - 1];
+  let streakLength = 1;
+  for (let i = filtered.length - 2; i >= 0; i--) {
+    if (filtered[i] === lastValue) {
+      streakLength++;
+    } else {
+      break;
+    }
+  }
+  
+  // 長龍定義:連續4次以上
+  if (streakLength >= 4) {
+    // 長龍越長,越傾向預測斬龍(出現相反結果)
+    const oppositeValue = lastValue === 'B' ? 'P' : 'B';
+    const oppositeCount = combination.filter(r => r === oppositeValue).length;
+    const oppositeRatio = oppositeCount / combination.length;
+    
+    // 長龍長度影響斬龍機率
+    // 4連: 30%斬龍機率, 5連: 40%, 6連: 50%, 7連+: 60%
+    const dragonFactor = Math.min((streakLength - 3) * 0.1, 0.6);
+    
+    // 組合中相反結果越多,分數越高
+    return 50 + oppositeRatio * 100 * dragonFactor;
+  }
+  
+  // 沒有長龍,給予平衡組合較高分
+  const bCount = combination.filter(r => r === 'B').length;
+  const balance = 1 - Math.abs(bCount - combination.length / 2) / (combination.length / 2);
+  return 50 + balance * 20;
+}
+
+/**
+ * 演算法 5: 單雙跳評分
+ * 檢測單跳(BPBPBP)或雙跳(BBPPBBPP)模式
+ */
+function scoreJumpPattern(history: GameResult[], combination: GameResult[]): number {
+  const filtered = history.filter(r => r !== 'T');
+  
+  if (filtered.length < 4) {
+    return 50;
+  }
+  
+  // 檢測單跳模式 (交替出現)
+  let singleJumpCount = 0;
+  for (let i = 0; i < filtered.length - 1; i++) {
+    if (filtered[i] !== filtered[i + 1]) {
+      singleJumpCount++;
+    }
+  }
+  const singleJumpRatio = singleJumpCount / (filtered.length - 1);
+  
+  // 檢測雙跳模式 (每兩個交替)
+  let doubleJumpCount = 0;
+  for (let i = 0; i < filtered.length - 2; i += 2) {
+    if (i + 3 < filtered.length) {
+      if (filtered[i] === filtered[i + 1] && 
+          filtered[i + 2] === filtered[i + 3] && 
+          filtered[i] !== filtered[i + 2]) {
+        doubleJumpCount++;
+      }
+    }
+  }
+  const doubleJumpDivisor = Math.max(1, Math.floor(filtered.length / 4));
+  const doubleJumpRatio = doubleJumpCount / doubleJumpDivisor;
+  
+  // 判斷是單跳還是雙跳模式
+  if (singleJumpRatio > 0.7) {
+    // 單跳模式:預測組合也應該單跳
+    let combJumpCount = 0;
+    let prev = filtered[filtered.length - 1];
+    for (const next of combination) {
+      if (next !== prev) combJumpCount++;
+      prev = next;
+    }
+    const combJumpRatio = combination.length > 0 ? combJumpCount / combination.length : 0;
+    return combJumpRatio * 100;
+  } else if (doubleJumpRatio > 0.5) {
+    // 雙跳模式:預測組合也應該雙跳
+    let score = 50;
+    const lastTwo = filtered.slice(-2);
+    if (lastTwo[0] === lastTwo[1]) {
+      // 剛完成一組雙,下一組應該相反
+      const oppositeValue = lastTwo[0] === 'B' ? 'P' : 'B';
+      const firstTwo = combination.slice(0, 2);
+      if (firstTwo[0] === oppositeValue && firstTwo[1] === oppositeValue) {
+        score += 30;
+      }
+    }
+    return score;
+  }
+  
+  // 沒有明顯跳躍模式
+  return 50;
+}
+
+/**
+ * 演算法 6: 路單齊整評分
+ * 百家樂路單美學:傾向產生整齊的路單圖形
+ */
+function scoreRoadBeauty(history: GameResult[], combination: GameResult[]): number {
+  const filtered = history.filter(r => r !== 'T');
+  
+  if (filtered.length < 5) {
+    return 50;
+  }
+  
+  // 分析最近的路單結構
+  const recent = filtered.slice(-12); // 看最近12個
+  
+  // 計算連續段落
+  const segments: { value: 'B' | 'P', length: number }[] = [];
+  let currentValue = recent[0] as 'B' | 'P';
+  let currentLength = 1;
+  
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i] === currentValue) {
+      currentLength++;
+    } else {
+      segments.push({ value: currentValue, length: currentLength });
+      currentValue = recent[i] as 'B' | 'P';
+      currentLength = 1;
+    }
+  }
+  segments.push({ value: currentValue, length: currentLength });
+  
+  // 檢測路單是否有規律性(長度相似的段落)
+  if (segments.length >= 3) {
+    const lengths = segments.map(s => s.length);
+    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+    const variance = lengths.reduce((sum, len) => sum + Math.pow(len - avgLength, 2), 0) / lengths.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // 標準差越小,路單越齊整
+    const regularity = Math.max(0, 1 - stdDev / avgLength);
+    
+    if (regularity > 0.5) {
+      // 路單齊整,預測下一段也應該符合平均長度
+      const lastSegment = segments[segments.length - 1];
+      const expectedLength = Math.round(avgLength);
+      
+      if (lastSegment.length >= expectedLength) {
+        // 當前段已達平均長度,應該換邊
+        const oppositeValue = lastSegment.value === 'B' ? 'P' : 'B';
+        const oppositeCount = combination.filter(r => r === oppositeValue).length;
+        const oppositeRatio = oppositeCount / combination.length;
+        return 50 + oppositeRatio * 50 * regularity;
+      } else {
+        // 當前段未達平均長度,應該繼續
+        const sameCount = combination.filter(r => r === lastSegment.value).length;
+        const sameRatio = sameCount / combination.length;
+        return 50 + sameRatio * 50 * regularity;
+      }
+    }
+  }
+  
+  // 沒有明顯規律
+  return 50;
+}
+
+/**
+ * 隨機預測評分 (隱藏演算法,不顯示給用戶)
+ */
+function scoreRandom(history: GameResult[], combination: GameResult[]): number {
+  // 使用歷史長度作為隨機種子,確保相同歷史得到相同結果
+  const seed = history.length;
+  let hash = seed;
+  
+  // 根據組合生成一個「隨機」分數
+  for (let i = 0; i < combination.length; i++) {
+    hash = ((hash << 5) - hash) + (combination[i] === 'B' ? 1 : 0);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // 歸一化到0-100
+  return Math.abs(hash % 100);
+}
+
+/**
  * 主預測函數 - 使用組合評分法預測接下來 N 次
  */
 export function predictNextN(history: GameResult[], n: number = 7): GameResult[] {
   // 生成所有可能的組合
   const combinations = generateCombinations(n);
   
-  // 評分權重
+  // 評分權重 (七種演算法)
   const weights = {
-    markov: 0.40,
-    pattern: 0.35,
-    frequency: 0.25,
+    markov: 0.19,        // 馬可夫鏈
+    pattern: 0.19,       // 模式延續
+    frequency: 0.19,     // 頻率平衡
+    dragon: 0.13,        // 長龍斬龍
+    jump: 0.13,          // 單雙跳
+    road: 0.13,          // 路單齊整
+    random: 0.04,        // 隨機生成
   };
   
   // 對每個組合評分
@@ -213,11 +426,19 @@ export function predictNextN(history: GameResult[], n: number = 7): GameResult[]
     const markovScore = scoreMarkovChain(history, combination);
     const patternScore = scorePatternContinuity(history, combination);
     const frequencyScore = scoreFrequencyBalance(history, combination);
+    const dragonScore = scoreDragonSlayer(history, combination);
+    const jumpScore = scoreJumpPattern(history, combination);
+    const roadScore = scoreRoadBeauty(history, combination);
+    const randomScore = scoreRandom(history, combination);
     
     const totalScore = 
       markovScore * weights.markov +
       patternScore * weights.pattern +
-      frequencyScore * weights.frequency;
+      frequencyScore * weights.frequency +
+      dragonScore * weights.dragon +
+      jumpScore * weights.jump +
+      roadScore * weights.road +
+      randomScore * weights.random;
     
     if (totalScore > bestScore) {
       bestScore = totalScore;
@@ -237,30 +458,45 @@ export function predictWithScores(history: GameResult[], n: number = 7): {
     markov: number;
     pattern: number;
     frequency: number;
+    dragon: number;
+    jump: number;
+    road: number;
     total: number;
   };
 } {
   const combinations = generateCombinations(n);
   
   const weights = {
-    markov: 0.40,
-    pattern: 0.35,
-    frequency: 0.25,
+    markov: 0.19,
+    pattern: 0.19,
+    frequency: 0.19,
+    dragon: 0.13,
+    jump: 0.13,
+    road: 0.13,
+    random: 0.04,
   };
   
   let bestCombination: GameResult[] = combinations[0];
-  let bestScores = { markov: 0, pattern: 0, frequency: 0, total: 0 };
+  let bestScores = { markov: 0, pattern: 0, frequency: 0, dragon: 0, jump: 0, road: 0, total: 0 };
   let bestScore = -Infinity;
   
   for (const combination of combinations) {
     const markovScore = scoreMarkovChain(history, combination);
     const patternScore = scorePatternContinuity(history, combination);
     const frequencyScore = scoreFrequencyBalance(history, combination);
+    const dragonScore = scoreDragonSlayer(history, combination);
+    const jumpScore = scoreJumpPattern(history, combination);
+    const roadScore = scoreRoadBeauty(history, combination);
+    const randomScore = scoreRandom(history, combination);
     
     const totalScore = 
       markovScore * weights.markov +
       patternScore * weights.pattern +
-      frequencyScore * weights.frequency;
+      frequencyScore * weights.frequency +
+      dragonScore * weights.dragon +
+      jumpScore * weights.jump +
+      roadScore * weights.road +
+      randomScore * weights.random;
     
     if (totalScore > bestScore) {
       bestScore = totalScore;
@@ -269,6 +505,9 @@ export function predictWithScores(history: GameResult[], n: number = 7): {
         markov: markovScore,
         pattern: patternScore,
         frequency: frequencyScore,
+        dragon: dragonScore,
+        jump: jumpScore,
+        road: roadScore,
         total: totalScore,
       };
     }

@@ -6,9 +6,10 @@ import path from "path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin()]; // 移除 vitePluginManusRuntime 以減小 HTML 大小
 
 export default defineConfig({
+  base: '/cat131314/', // GitHub Pages 的倉庫名稱
   plugins,
   resolve: {
     alias: {
@@ -22,6 +23,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    assetsInlineLimit: 0, // 禁止內嵌資源,全部輸出為獨立文件
+    cssCodeSplit: true, // CSS 代碼分割
+    rollupOptions: {
+      output: {
+        manualChunks: undefined, // 不手動分割 chunk
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+      },
+    },
   },
   server: {
     port: 3000,
